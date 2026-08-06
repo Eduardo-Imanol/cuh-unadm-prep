@@ -1,0 +1,15 @@
+import { useEffect } from 'react';
+import { useAuthStore } from '@/store/authStore';
+
+export function useAuth() {
+  const user = useAuthStore((s) => s.user);
+  const status = useAuthStore((s) => s.status);
+  const error = useAuthStore((s) => s.error);
+  const login = useAuthStore((s) => s.login);
+  const logout = useAuthStore((s) => s.logout);
+  const subscribeToAuth = useAuthStore((s) => s.subscribeToAuth);
+
+  useEffect(() => subscribeToAuth(), [subscribeToAuth]);
+
+  return { user, status, error, login, logout };
+}

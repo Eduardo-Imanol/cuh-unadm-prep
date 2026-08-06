@@ -1,0 +1,22 @@
+node_modules
+dist
+dev-dist
+coverage
+*.local
+.env
+.env.*
+!.env.example
+.DS_Store
+npm-debug.log*
+tsconfig.tsbuildinfo
+
+# Local tooling / AI configuration (not part of the app)
+.opencode/
+.agents/
+AGENTS.md
+opencode.md
+instructions.md
+project.md
+skills-lock.json
+firebase.json
+.firebaserc
