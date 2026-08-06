@@ -163,7 +163,7 @@ export function Navbar({ onOpenMenu }: NavbarProps) {
         <div className="flex flex-1 justify-center">
           <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-4 py-1.5 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-navy-dark dark:text-slate-300">
             <Globe className="size-3.5 text-emerald" aria-hidden="true" />
-            <span className="truncate">cuh-unadm-pwa.app</span>
+            <span className="truncate">cuh-unadm-prep.netlify.app</span>
           </div>
         </div>
 
