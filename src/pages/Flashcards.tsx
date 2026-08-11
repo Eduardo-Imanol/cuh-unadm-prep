@@ -7,8 +7,9 @@ import {
   RotateCcw,
   Sparkles,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getFlashcardCategories, getFlashcardEntries } from '@/data/flashcards';
+import { useAIChatStore } from '@/store/aiChatStore';
 
 const ALL_CATEGORY = 'Todas';
 
@@ -32,6 +33,19 @@ export default function Flashcards() {
 
   const total = filtered.length;
   const current = filtered[index];
+
+  const setContextDetail = useAIChatStore((state) => state.setContextDetail);
+
+  useEffect(() => {
+    if (current === undefined) {
+      setContextDetail(null);
+      return;
+    }
+    setContextDetail(
+      `Flashcard en pantalla "${current.question}" (categoría ${current.category}). El estudiante puede preguntarte sobre este concepto o pedirte que se lo expliques con más detalle.`,
+    );
+    return () => setContextDetail(null);
+  }, [current, setContextDetail]);
 
   const selectCategory = (next: string) => {
     setCategory(next);

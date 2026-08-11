@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { AIChat } from '@/components/ai/AIChat';
 import { Navbar } from '@/components/Navbar';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { Sidebar } from '@/components/Sidebar';
@@ -31,6 +32,7 @@ function AppShell() {
           </div>
         </main>
       </div>
+      <AIChat />
     </div>
   );
 }

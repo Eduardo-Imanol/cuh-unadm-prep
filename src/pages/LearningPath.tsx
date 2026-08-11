@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { AlertTriangle, BookOpen, CalendarRange, ClipboardCheck, FileQuestion, Timer } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
 import { AreaSectionCard } from '@/components/learningPath/AreaSectionCard';
 import { EXAM_AREAS } from '@/data/exams';
 import {
@@ -13,6 +14,7 @@ import {
   type SyllabusAreaGroup,
 } from '@/data/syllabus';
 import { useTopicMastery } from '@/hooks/useTopicMastery';
+import { useAIChatStore } from '@/store/aiChatStore';
 
 function LearningPathLoading() {
   return (
@@ -29,15 +31,37 @@ function LearningPathLoading() {
 
 export default function LearningPath() {
   const { masteredIds, isLoading, toggle } = useTopicMastery();
+  const setContextDetail = useAIChatStore((state) => state.setContextDetail);
+
+  const totalCount = useMemo(() => getSyllabusTotalCount(), []);
+  const groups = useMemo(() => getSyllabusAreaGroups(), []);
+  const masteredCount = masteredIds.size;
+  const overallPercentage = totalCount === 0 ? 0 : Math.round((masteredCount / totalCount) * 100);
+
+  const areaLabels = useMemo(
+    () =>
+      groups
+        .map((group) => EXAM_AREAS.find((item) => item.id === group.area)?.label ?? group.area)
+        .join(', '),
+    [groups],
+  );
+
+  const detail =
+    `Ruta de aprendizaje con ${masteredCount}/${totalCount} subtemas dominados (${overallPercentage}%). ` +
+    `Materias disponibles: ${areaLabels}. El estudiante puede preguntarte sobre cualquier tema del temario ` +
+    'o pedir recomendaciones de estudio.';
+
+  useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+    setContextDetail(detail);
+    return () => setContextDetail(null);
+  }, [isLoading, setContextDetail, detail]);
 
   if (isLoading) {
     return <LearningPathLoading />;
   }
-
-  const totalCount = getSyllabusTotalCount();
-  const masteredCount = masteredIds.size;
-  const overallPercentage = totalCount === 0 ? 0 : Math.round((masteredCount / totalCount) * 100);
-  const groups = getSyllabusAreaGroups();
 
   return (
     <motion.main
