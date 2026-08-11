@@ -8,16 +8,6 @@ export interface NavbarProps {
   onOpenMenu: () => void;
 }
 
-function WindowControls() {
-  return (
-    <div className="hidden items-center gap-2 sm:flex" aria-hidden="true">
-      <span className="size-3 rounded-full bg-[#FF5F57]" />
-      <span className="size-3 rounded-full bg-[#FEBC2E]" />
-      <span className="size-3 rounded-full bg-[#28C840]" />
-    </div>
-  );
-}
-
 function getInitial(name: string | null | undefined, email: string | null | undefined): string {
   const source = name?.trim() || email?.trim() || 'U';
   return source.charAt(0).toUpperCase();
@@ -157,8 +147,6 @@ export function Navbar({ onOpenMenu }: NavbarProps) {
         >
           <Menu className="size-5" aria-hidden="true" />
         </button>
-
-        <WindowControls />
 
         <div className="flex flex-1 justify-center">
           <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-4 py-1.5 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-navy-dark dark:text-slate-300">
