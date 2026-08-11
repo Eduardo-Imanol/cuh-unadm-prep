@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import {
+  Bot,
   Eye,
   EyeOff,
   KeyRound,
@@ -11,6 +12,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useAIConfig, type AIConfigStatus } from '@/hooks/useAIConfig';
+import { AI_PROVIDERS } from '@/services/aiService';
 
 const STATUS_STYLES: Record<
   AIConfigStatus,
@@ -41,7 +43,7 @@ export default function AIConfig() {
             Configurar IA
           </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Conecta tu propia API key (OpenRouter/OpenAI) para asistencia personalizada.
+            Conecta tu propia API key (OpenRouter, OpenAI o Gemini) para asistencia personalizada.
           </p>
         </div>
         <span className="inline-flex items-center gap-2 rounded-full border border-emerald/20 bg-emerald/10 px-3 py-1 text-xs font-semibold text-emerald">
@@ -62,6 +64,36 @@ export default function AIConfig() {
           </div>
 
           <div className="mt-5 space-y-1.5">
+            <fieldset>
+              <legend className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                Proveedor de IA
+              </legend>
+              <div className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-3" role="radiogroup">
+                {AI_PROVIDERS.map((provider) => {
+                  const isActive = config.provider === provider.id;
+                  return (
+                    <button
+                      key={provider.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={isActive}
+                      onClick={() => config.setProvider(provider.id)}
+                      className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald focus-visible:ring-offset-2 dark:focus-visible:ring-offset-navy-light ${
+                        isActive
+                          ? 'border-emerald bg-emerald/10 text-emerald ring-1 ring-emerald/30'
+                          : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white dark:border-slate-700 dark:bg-navy-dark dark:text-slate-300 dark:hover:border-slate-600'
+                      }`}
+                    >
+                      <Bot className="size-4" aria-hidden="true" />
+                      {provider.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+          </div>
+
+          <div className="mt-5 space-y-1.5">
             <label htmlFor="ai-key" className="block text-sm font-medium text-slate-700 dark:text-slate-200">
               API Key
             </label>
@@ -71,7 +103,7 @@ export default function AIConfig() {
                 type={config.isKeyVisible ? 'text' : 'password'}
                 value={config.draftKey}
                 onChange={(event) => config.setDraftKey(event.target.value)}
-                placeholder="sk-or-v1-…"
+                placeholder={AI_PROVIDERS.find((provider) => provider.id === config.provider)?.placeholder ?? '…'}
                 autoComplete="off"
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-4 pr-12 font-mono text-sm text-navy shadow-sm outline-none transition-colors placeholder:text-slate-400 focus:border-emerald focus:bg-white focus:ring-2 focus:ring-emerald/25 dark:border-slate-700 dark:bg-navy-dark dark:text-slate-100 dark:placeholder:text-slate-500"
               />

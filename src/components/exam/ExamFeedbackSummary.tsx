@@ -12,6 +12,7 @@ interface ExamFeedbackSummaryProps {
 
 export function ExamFeedbackSummary({ examTitle, score }: ExamFeedbackSummaryProps) {
   const apiKey = useAIStore((state) => state.apiKey);
+  const provider = useAIStore((state) => state.provider);
   const hasKey = apiKey.trim().length > 0;
   const [feedback, setFeedback] = useState<AIFeedbackResult | undefined>();
 
@@ -24,6 +25,7 @@ export function ExamFeedbackSummary({ examTitle, score }: ExamFeedbackSummaryPro
     void getFeedback(
       { topic: examTitle, score: score.correct, total: score.total, weakAreas },
       apiKey,
+      provider,
     ).then((value) => {
       if (!cancelled) {
         setFeedback(value);
@@ -33,7 +35,7 @@ export function ExamFeedbackSummary({ examTitle, score }: ExamFeedbackSummaryPro
     return () => {
       cancelled = true;
     };
-  }, [apiKey, examTitle, score]);
+  }, [apiKey, examTitle, provider, score]);
 
   return (
     <motion.section

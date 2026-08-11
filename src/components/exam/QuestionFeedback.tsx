@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import {
   buildStaticQuestionFeedback,
   getQuestionFeedback,
+  type AIProvider,
   type AIQuestionFeedbackResult,
 } from '@/services/aiService';
 
@@ -14,6 +15,7 @@ interface QuestionFeedbackProps {
   correctIndex: number;
   staticFeedback: string | undefined;
   apiKey: string;
+  provider: AIProvider;
 }
 
 const cache = new Map<string, AIQuestionFeedbackResult>();
@@ -26,6 +28,7 @@ export function QuestionFeedback({
   correctIndex,
   staticFeedback,
   apiKey,
+  provider,
 }: QuestionFeedbackProps) {
   const cacheKey = `${topic}:${question}`;
   const hasKey = apiKey.trim().length > 0;
@@ -52,6 +55,7 @@ export function QuestionFeedback({
       { topic, question, options, userAnswerIndex, correctIndex },
       apiKey,
       staticFeedback,
+      provider,
     ).then((value) => {
       if (cancelled) {
         return;
@@ -64,7 +68,7 @@ export function QuestionFeedback({
     return () => {
       cancelled = true;
     };
-  }, [apiKey, cacheKey, correctIndex, hasKey, options, question, result, staticFeedback, topic, userAnswerIndex]);
+  }, [apiKey, cacheKey, correctIndex, hasKey, options, provider, question, result, staticFeedback, topic, userAnswerIndex]);
 
   if (hasKey && isLoading && result === undefined) {
     return (

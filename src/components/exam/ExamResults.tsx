@@ -114,6 +114,7 @@ export function ExamResults({ exam, session }: ExamResultsProps) {
   const navigate = useNavigate();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const apiKey = useAIStore((state) => state.apiKey);
+  const provider = useAIStore((state) => state.provider);
 
   const result = session.result;
   if (!result) {
@@ -378,6 +379,7 @@ export function ExamResults({ exam, session }: ExamResultsProps) {
                       correctIndex={question.correctIndex}
                       staticFeedback={question.feedback}
                       apiKey={apiKey}
+                      provider={provider}
                     />
                   </div>
                 ) : null}

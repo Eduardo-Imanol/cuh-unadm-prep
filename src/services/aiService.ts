@@ -1,3 +1,5 @@
+export type AIProvider = 'openrouter' | 'openai' | 'gemini';
+
 export interface AIQuestionPayload {
   topic: string;
   count: number;
@@ -27,8 +29,177 @@ export interface AIServiceError {
   code: 'NO_KEY' | 'NETWORK' | 'RATE_LIMIT' | 'INVALID_RESPONSE';
 }
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
+export interface AIQuestionFeedbackPayload {
+  topic: string;
+  question: string;
+  options: string[];
+  userAnswerIndex: number | undefined;
+  correctIndex: number;
+}
+
+export interface AIQuestionFeedbackResult {
+  explanation: string;
+  usedFallback: boolean;
+}
+
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+interface ProviderAdapter {
+  id: AIProvider;
+  label: string;
+  placeholder: string;
+  model: string;
+  endpoint: string;
+  buildHeaders: (apiKey: string) => Record<string, string>;
+  buildBody: (messages: ChatMessage[], jsonMode: boolean) => unknown;
+  parseContent: (data: unknown) => string | undefined;
+}
+
+function parseOpenAiContent(data: unknown): string | undefined {
+  if (typeof data !== 'object' || data === null) {
+    return undefined;
+  }
+  const choices = (data as { choices?: unknown }).choices;
+  if (!Array.isArray(choices)) {
+    return undefined;
+  }
+  const content = (choices[0] as { message?: { content?: unknown } } | undefined)?.message?.content;
+  return typeof content === 'string' ? content : undefined;
+}
+
+function parseGeminiContent(data: unknown): string | undefined {
+  if (typeof data !== 'object' || data === null) {
+    return undefined;
+  }
+  const root = data as { steps?: unknown; candidates?: unknown };
+
+  const texts: string[] = [];
+
+  if (Array.isArray(root.steps)) {
+    for (const step of root.steps) {
+      if ((step as { type?: unknown }).type !== 'model_output') {
+        continue;
+      }
+      const content = (step as { content?: unknown }).content;
+      if (!Array.isArray(content)) {
+        continue;
+      }
+      for (const part of content) {
+        const text = (part as { text?: unknown }).text;
+        if (typeof text === 'string' && text.trim().length > 0) {
+          texts.push(text.trim());
+        }
+      }
+    }
+  }
+
+  if (Array.isArray(root.candidates)) {
+    const parts = (root.candidates[0] as { content?: { parts?: unknown } } | undefined)?.content?.parts;
+    if (Array.isArray(parts)) {
+      for (const part of parts) {
+        const text = (part as { text?: unknown }).text;
+        if (typeof text === 'string' && text.trim().length > 0) {
+          texts.push(text.trim());
+        }
+      }
+    }
+  }
+
+  const joined = texts.join('\n').trim();
+  return joined.length > 0 ? joined : undefined;
+}
+
+function openAiBody(model: string, messages: ChatMessage[], jsonMode: boolean): unknown {
+  return {
+    model,
+    messages,
+    ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
+  };
+}
+
+function toGeminiContents(
+  messages: ChatMessage[],
+): Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> {
+  const merged: Array<{ role: 'user' | 'model'; text: string }> = [];
+
+  for (const message of messages) {
+    if (message.role === 'system') {
+      continue;
+    }
+    const role = message.role === 'assistant' ? 'model' : 'user';
+    const last = merged[merged.length - 1];
+    if (last && last.role === role) {
+      last.text = `${last.text}\n\n${message.content}`;
+    } else {
+      merged.push({ role, text: message.content });
+    }
+  }
+
+  return merged.map((entry) => ({ role: entry.role, parts: [{ text: entry.text }] }));
+}
+
+const PROVIDER_ADAPTERS: Record<AIProvider, ProviderAdapter> = {
+  openrouter: {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    placeholder: 'sk-or-v1-…',
+    model: 'openai/gpt-4o-mini',
+    endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+    buildHeaders: (apiKey) => ({
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    }),
+    buildBody: (messages, jsonMode) => openAiBody('openai/gpt-4o-mini', messages, jsonMode),
+    parseContent: parseOpenAiContent,
+  },
+  openai: {
+    id: 'openai',
+    label: 'OpenAI',
+    placeholder: 'sk-…',
+    model: 'gpt-4o-mini',
+    endpoint: 'https://api.openai.com/v1/chat/completions',
+    buildHeaders: (apiKey) => ({
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    }),
+    buildBody: (messages, jsonMode) => openAiBody('gpt-4o-mini', messages, jsonMode),
+    parseContent: parseOpenAiContent,
+  },
+  gemini: {
+    id: 'gemini',
+    label: 'Google Gemini',
+    placeholder: 'AIza…',
+    model: 'gemini-3.6-flash',
+    endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
+    buildHeaders: (apiKey) => ({
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+    }),
+    buildBody: (messages, jsonMode) => {
+      const system = messages
+        .filter((message) => message.role === 'system')
+        .map((message) => message.content)
+        .join('\n\n');
+      return {
+        systemInstruction: system.length > 0 ? { parts: [{ text: system }] } : undefined,
+        contents: toGeminiContents(messages),
+        ...(jsonMode ? { generationConfig: { responseMimeType: 'application/json' } } : {}),
+      };
+    },
+    parseContent: parseGeminiContent,
+  },
+};
+
+export const AI_PROVIDERS = Object.values(PROVIDER_ADAPTERS).map((adapter) => ({
+  id: adapter.id,
+  label: adapter.label,
+  placeholder: adapter.placeholder,
+}));
+
+export const OPENAI_URL = PROVIDER_ADAPTERS.openai.endpoint;
 
 const SYSTEM_PROMPT =
   'Eres un generador de preguntas de opción múltiple para el Examen CUH de la UnADM. ' +
@@ -81,19 +252,6 @@ export function buildStaticFeedback(payload: AIFeedbackPayload): AIFeedbackResul
   return { summary, tips, usedFallback: true };
 }
 
-export interface AIQuestionFeedbackPayload {
-  topic: string;
-  question: string;
-  options: string[];
-  userAnswerIndex: number | undefined;
-  correctIndex: number;
-}
-
-export interface AIQuestionFeedbackResult {
-  explanation: string;
-  usedFallback: boolean;
-}
-
 function buildQuestionFeedbackPrompt(payload: AIQuestionFeedbackPayload): string {
   const label = (index: number): string => `${String.fromCharCode(65 + index)}. ${payload.options[index] ?? ''}`;
   const userOption =
@@ -125,44 +283,91 @@ async function isOnline(): Promise<boolean> {
   return typeof navigator !== 'undefined' ? navigator.onLine : false;
 }
 
+class ChatCompletionError extends Error {
+  status: number;
+  apiMessage: string | undefined;
+
+  constructor(status: number, apiMessage: string | undefined) {
+    super(apiMessage ?? `API responded with status ${status}`);
+    this.status = status;
+    this.apiMessage = apiMessage;
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError';
+}
+
+async function fetchChatCompletion(
+  messages: ChatMessage[],
+  apiKey: string,
+  provider: AIProvider,
+  jsonMode: boolean,
+): Promise<string | undefined> {
+  const adapter = PROVIDER_ADAPTERS[provider];
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    let res: Response;
+    try {
+      res = await fetch(adapter.endpoint, {
+        method: 'POST',
+        headers: adapter.buildHeaders(apiKey),
+        body: JSON.stringify(adapter.buildBody(messages, jsonMode)),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+      throw new ChatCompletionError(
+        0,
+        'No se pudo contactar a la API. Revisa tu conexión o los permisos CORS de tu key.',
+      );
+    }
+
+    if (!res.ok) {
+      let apiMessage: string | undefined;
+      try {
+        const body = (await res.json()) as unknown;
+        const message = (body as { error?: { message?: unknown } }).error?.message;
+        if (typeof message === 'string' && message.trim().length > 0) {
+          apiMessage = message.trim();
+        }
+      } catch {
+        apiMessage = undefined;
+      }
+      throw new ChatCompletionError(res.status, apiMessage);
+    }
+
+    const data = (await res.json()) as unknown;
+    return adapter.parseContent(data);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function getFeedback(
   payload: AIFeedbackPayload,
   apiKey: string | undefined,
+  provider: AIProvider = 'openrouter',
 ): Promise<AIFeedbackResult> {
   if (!apiKey?.trim() || !(await isOnline())) {
     return buildStaticFeedback(payload);
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
-
   try {
-    const res = await fetch(OPENROUTER_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'openai/gpt-4o-mini',
-        messages: [
-          { role: 'system', content: FEEDBACK_SYSTEM_PROMPT },
-          { role: 'user', content: buildFeedbackPrompt(payload) },
-        ],
-        response_format: { type: 'json_object' },
-      }),
-      signal: controller.signal,
-    });
+    const content = await fetchChatCompletion(
+      [
+        { role: 'system', content: FEEDBACK_SYSTEM_PROMPT },
+        { role: 'user', content: buildFeedbackPrompt(payload) },
+      ],
+      apiKey,
+      provider,
+      true,
+    );
 
-    if (!res.ok) {
-      return buildStaticFeedback(payload);
-    }
-
-    const data = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-
-    const content = data.choices?.[0]?.message?.content;
     if (!content) {
       return buildStaticFeedback(payload);
     }
@@ -179,8 +384,6 @@ export async function getFeedback(
     };
   } catch {
     return buildStaticFeedback(payload);
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
@@ -188,41 +391,23 @@ export async function getQuestionFeedback(
   payload: AIQuestionFeedbackPayload,
   apiKey: string | undefined,
   fallbackExplanation: string | undefined,
+  provider: AIProvider = 'openrouter',
 ): Promise<AIQuestionFeedbackResult> {
   if (!apiKey?.trim() || !(await isOnline())) {
     return buildStaticQuestionFeedback(fallbackExplanation);
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
-
   try {
-    const res = await fetch(OPENROUTER_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'openai/gpt-4o-mini',
-        messages: [
-          { role: 'system', content: QUESTION_FEEDBACK_SYSTEM_PROMPT },
-          { role: 'user', content: buildQuestionFeedbackPrompt(payload) },
-        ],
-        response_format: { type: 'json_object' },
-      }),
-      signal: controller.signal,
-    });
+    const content = await fetchChatCompletion(
+      [
+        { role: 'system', content: QUESTION_FEEDBACK_SYSTEM_PROMPT },
+        { role: 'user', content: buildQuestionFeedbackPrompt(payload) },
+      ],
+      apiKey,
+      provider,
+      true,
+    );
 
-    if (!res.ok) {
-      return buildStaticQuestionFeedback(fallbackExplanation);
-    }
-
-    const data = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-
-    const content = data.choices?.[0]?.message?.content;
     if (!content) {
       return buildStaticQuestionFeedback(fallbackExplanation);
     }
@@ -235,52 +420,29 @@ export async function getQuestionFeedback(
     return { explanation: parsed.explanation.trim(), usedFallback: false };
   } catch {
     return buildStaticQuestionFeedback(fallbackExplanation);
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
 export async function generateQuestions(
   payload: AIQuestionPayload,
   apiKey: string,
+  provider: AIProvider = 'openrouter',
 ): Promise<AIQuestionResult[]> {
   if (!apiKey.trim()) {
     throw { message: 'No se configuró una API key.', code: 'NO_KEY' } satisfies AIServiceError;
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
-
   try {
-    const res = await fetch(OPENROUTER_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'openai/gpt-4o-mini',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: buildPrompt(payload) },
-        ],
-        response_format: { type: 'json_object' },
-      }),
-      signal: controller.signal,
-    });
+    const content = await fetchChatCompletion(
+      [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: buildPrompt(payload) },
+      ],
+      apiKey,
+      provider,
+      true,
+    );
 
-    if (!res.ok) {
-      throw {
-        message: `La API respondió con estado ${res.status}.`,
-        code: res.status === 429 ? 'RATE_LIMIT' : 'NETWORK',
-      } satisfies AIServiceError;
-    }
-
-    const data = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-
-    const content = data.choices?.[0]?.message?.content;
     if (!content) {
       throw { message: 'La API no devolvió contenido.', code: 'INVALID_RESPONSE' } satisfies AIServiceError;
     }
@@ -292,13 +454,44 @@ export async function generateQuestions(
     }
     return questions;
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (isAbortError(error)) {
       throw { message: 'La solicitud tardó demasiado.', code: 'NETWORK' } satisfies AIServiceError;
     }
+    if (error instanceof ChatCompletionError) {
+      throw {
+        message: error.apiMessage ?? `La API respondió con estado ${error.status}.`,
+        code: error.status === 429 ? 'RATE_LIMIT' : 'NETWORK',
+      } satisfies AIServiceError;
+    }
     throw error;
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
-export { OPENAI_URL };
+export async function chatWithAI(
+  messages: ChatMessage[],
+  apiKey: string,
+  provider: AIProvider = 'openrouter',
+): Promise<string> {
+  if (!apiKey.trim()) {
+    throw { message: 'No se configuró una API key.', code: 'NO_KEY' } satisfies AIServiceError;
+  }
+
+  try {
+    const content = await fetchChatCompletion(messages, apiKey, provider, false);
+    if (!content) {
+      throw { message: 'La IA no devolvió contenido.', code: 'INVALID_RESPONSE' } satisfies AIServiceError;
+    }
+    return content;
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw { message: 'La solicitud tardó demasiado.', code: 'NETWORK' } satisfies AIServiceError;
+    }
+    if (error instanceof ChatCompletionError) {
+      throw {
+        message: error.apiMessage ?? `La API respondió con estado ${error.status}.`,
+        code: error.status === 429 ? 'RATE_LIMIT' : 'NETWORK',
+      } satisfies AIServiceError;
+    }
+    throw error;
+  }
+}
